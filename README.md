@@ -2,7 +2,8 @@
 The model is created to label ship's pixels on images.
 The dataset used: https://www.kaggle.com/datasets/mikaelstrauhs/airbus-ship-detection-train-set-70
 ## Main Files:
-airbus_unet_train.ipynb -- Google colab file for model creation and training(Unfinished :()
+train.py -- Python file for model training(Unfinished :()
+model.py -- Model realization
 (*Coming soon*)airbus_predict.py
 
 ###Model
