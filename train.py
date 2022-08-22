@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 from model import unet_model
+from model import DiceLoss
 
 
 # CONSTANTS
@@ -58,28 +59,28 @@ def dice_score_loss(y_true, y_pred, smooth=1):
     dice = (2. * intersection + smooth) / (tf.keras.backend.sum(y_true_f) + tf.keras.backend.sum(y_pred_f) + smooth)
     return 1 - dice
 
+if __name__ == "__main__":
+    df = pd.read_csv('data/test_ship_segmentations_v3.csv')
+    df['EncodedPixels'] += ' '
+    df = df.groupby(['ImageId']).sum()
+    df['EncodedPixels'] = df['EncodedPixels'].replace(0, '')
 
-df = pd.read_csv('data/test_ship_segmentations_v3.csv')
-df['EncodedPixels'] += ' '
-df = df.groupby(['ImageId']).sum()
-df['EncodedPixels'] = df['EncodedPixels'].replace(0, '')
+    # DOWNSAMPLE IMAGES WITH NO SHIPS
+    images_range = [index for index in range(len(df)) if not (index % 3 and df['EncodedPixels'].iloc[index] == '')]  # Leaving approx 33% of images without ship
 
-# DOWNSAMPLE IMAGES WITH NO SHIPS
-images_range = [index for index in range(len(df)) if not (index % 3 and df['EncodedPixels'].iloc[index] == '')]  # Leaving approx 33% of images without ship
-
-training = tf.data.Dataset.from_generator(image_mask_gen, output_types=(tf.float32, tf.float32), output_shapes=((256, 256, 3), (256, 256, 1)))
+    training = tf.data.Dataset.from_generator(image_mask_gen, output_types=(tf.float32, tf.float32), output_shapes=((256, 256, 3), (256, 256, 1)))
 
 
-unet = unet_model()
-print(unet.summary())
+    unet = unet_model()
+    print(unet.summary())
 
-unet.compile(optimizer='adam',
-             loss=dice_score_loss,
-             metrics=tf.keras.metrics.BinaryIoU())
+    unet.compile(optimizer='adam',
+                 loss=DiceLoss(),
+                 metrics=tf.keras.metrics.BinaryIoU())
 
-EPOCHS = 3
-BATCH_SIZE = 8
-train_dataset = training.batch(BATCH_SIZE)
-print(train_dataset.element_spec)
-model_history = unet.fit(train_dataset, epochs=EPOCHS)
-unet.save("trained_model")
+    EPOCHS = 8
+    BATCH_SIZE = 16
+    train_dataset = training.batch(BATCH_SIZE)
+    print(train_dataset.element_spec)
+    model_history = unet.fit(train_dataset, epochs=EPOCHS)
+    unet.save("trained_model")
