@@ -6,7 +6,6 @@ import os
 from model import unet_model
 from model import DiceLoss
 
-
 # CONSTANTS
 IMAGE_SHAPE = (768, 768)
 path = ''
@@ -16,6 +15,14 @@ IMAGES_LIST = sorted([IMAGE_PATH + i for i in IMAGES_LIST])
 
 
 def rle_to_mask(rle):
+    """
+    Converts Encoded Pixels to image
+    Args:
+        rle: string of Encoded Pixels
+
+    Returns:
+        NumPy array representation of an image
+    """
     shape_x = IMAGE_SHAPE[0]
     shape_y = IMAGE_SHAPE[1]
     if rle == '':
@@ -36,7 +43,6 @@ def rle_to_mask(rle):
 def image_mask_gen():
     """
     Generator for a (image, mask) set item
-
     Reads image from images folder and converts it to a normalized tensor
     Gets Encoded Pixels for the corresponding image from csv file and converts it to a mask
     Warning: Make sure IMAGES_LIST is sorted the same way as the csv file
@@ -51,14 +57,6 @@ def image_mask_gen():
         yield (img, mask)
 
 
-
-def dice_score_loss(y_true, y_pred, smooth=1):
-    y_true_f = tf.keras.backend.flatten(y_true)
-    y_pred_f = tf.keras.backend.flatten(y_pred)
-    intersection = tf.keras.backend.sum(y_true_f * y_pred_f)
-    dice = (2. * intersection + smooth) / (tf.keras.backend.sum(y_true_f) + tf.keras.backend.sum(y_pred_f) + smooth)
-    return 1 - dice
-
 if __name__ == "__main__":
     df = pd.read_csv('data/test_ship_segmentations_v3.csv')
     df['EncodedPixels'] += ' '
@@ -66,21 +64,24 @@ if __name__ == "__main__":
     df['EncodedPixels'] = df['EncodedPixels'].replace(0, '')
 
     # DOWNSAMPLE IMAGES WITH NO SHIPS
-    images_range = [index for index in range(len(df)) if not (index % 3 and df['EncodedPixels'].iloc[index] == '')]  # Leaving approx 33% of images without ship
+    images_range = [index for index in range(len(df)) if not (
+                index % 3 and df['EncodedPixels'].iloc[index] == '')]  # Leaving approx 33% of images without ship
 
-    training = tf.data.Dataset.from_generator(image_mask_gen, output_types=(tf.float32, tf.float32), output_shapes=((256, 256, 3), (256, 256, 1)))
-
+    training = tf.data.Dataset.from_generator(image_mask_gen,
+                                              output_types=(tf.float32, tf.float32),
+                                              output_shapes=((256, 256, 3), (256, 256, 1)))
 
     unet = unet_model()
     print(unet.summary())
-
     unet.compile(optimizer='adam',
                  loss=DiceLoss(),
                  metrics=tf.keras.metrics.BinaryIoU())
 
-    EPOCHS = 8
+    EPOCHS = 9
     BATCH_SIZE = 16
     train_dataset = training.batch(BATCH_SIZE)
     print(train_dataset.element_spec)
-    model_history = unet.fit(train_dataset, epochs=EPOCHS)
-    unet.save("trained_model")
+    model_history = unet.fit(train_dataset, epochs=4)
+    plt.plot(model_history.history['loss'])
+    plt.savefig("logs/model_loss15000x4.png")
+    unet.save("trained_model15000x4")

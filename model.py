@@ -18,6 +18,7 @@ class DiceLoss(tf.keras.losses.Loss):
         result = 1 - tf.divide(nominator, denominator)
         return result
 
+
 def conv_block(inputs=None, n_filters=8, dropout_prob=0, max_pooling=True):
     """
     Convolutional downsampling block
