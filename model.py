@@ -11,15 +11,13 @@ class DiceLoss(tf.keras.losses.Loss):
     def call(self, y_true, y_pred):
         y_true, y_pred = tf.cast(
             y_true, dtype=tf.float32), tf.cast(y_pred, tf.float32)
-        nominator = 2 * \
-            tf.reduce_sum(tf.multiply(y_pred, y_true)) + self.smooth
-        denominator = tf.reduce_sum(
-            y_pred ** self.gama) + tf.reduce_sum(y_true ** self.gama) + self.smooth
+        nominator = 2 * tf.reduce_sum(tf.multiply(y_pred, y_true)) + self.smooth
+        denominator = tf.reduce_sum(y_pred ** self.gama) + tf.reduce_sum(y_true ** self.gama) + self.smooth
         result = 1 - tf.divide(nominator, denominator)
         return result
 
 
-def conv_block(inputs=None, n_filters=8, dropout_prob=0, max_pooling=True):
+def conv_block(inputs=None, n_filters=4, dropout_prob=0, max_pooling=True):
     """
     Convolutional downsampling block
 
@@ -58,7 +56,7 @@ def conv_block(inputs=None, n_filters=8, dropout_prob=0, max_pooling=True):
     return next_layer, skip_connection
 
 
-def upsampling_block(prev_input, skipped_input, n_filters=8):
+def upsampling_block(prev_input, skipped_input, n_filters=4):
     """
     Convolutional upsampling block
 
@@ -87,7 +85,7 @@ def upsampling_block(prev_input, skipped_input, n_filters=8):
     return conv
 
 
-def unet_model(input_size=(256, 256, 3), n_filters=8, n_classes=1):
+def unet_model(input_size=(96, 96, 3), n_filters=4, n_classes=1):
     """
     Unet model
 
@@ -100,14 +98,14 @@ def unet_model(input_size=(256, 256, 3), n_filters=8, n_classes=1):
     """
     inputs = tf.keras.layers.Input(input_size)
     # Encoding
-    cblock1 = conv_block(inputs, n_filters)
-    cblock2 = conv_block(cblock1[0], n_filters * 2)
-    cblock3 = conv_block(cblock2[0], n_filters * 4)
-    cblock4 = conv_block(cblock3[0], n_filters * 8, max_pooling=False)
+    cblock1 = conv_block(inputs, n_filters, dropout_prob=0.2)
+    cblock2 = conv_block(cblock1[0], n_filters * 2, dropout_prob=0.2)
+    cblock3 = conv_block(cblock2[0], n_filters * 4, max_pooling=False, dropout_prob=0.3)
+    #cblock4 = conv_block(cblock3[0], n_filters * 8, max_pooling=False)
 
     # Decoding
-    ublock6 = upsampling_block(cblock4[0], cblock3[1], n_filters * 4)
-    ublock7 = upsampling_block(ublock6, cblock2[1], n_filters * 2)
+    #ublock6 = upsampling_block(cblock4[0], cblock3[1], n_filters * 4)
+    ublock7 = upsampling_block(cblock3[0], cblock2[1], n_filters * 2)
     ublock8 = upsampling_block(ublock7, cblock1[1], n_filters)
 
     conv9 = tf.keras.layers.Conv2D(n_filters,
