@@ -44,10 +44,10 @@ def image_mask_gen():
     for i in images_range:
         img = tf.io.read_file(IMAGES_LIST[i])
         img = tf.image.decode_jpeg(img, channels=3)
-        img = tf.image.resize(img, (96, 96))
+        img = tf.image.resize(img, (256, 256))
         img = tf.cast(img, tf.float32) / 255.  # Normalizing input
         mask = rle_to_mask(df['EncodedPixels'].iloc[i])
-        mask = tf.image.resize(mask, (96, 96))
+        mask = tf.image.resize(mask, (256, 256))
         yield (img, mask)
 
 
@@ -80,7 +80,7 @@ if __name__ == "__main__":
 
     ds = tf.data.Dataset.from_generator(image_mask_gen,
                                         output_types=(tf.float32, tf.float32),
-                                        output_shapes=((96, 96, 3), (96, 96, 1)))
+                                        output_shapes=((256, 256, 3), (256, 256, 1)))
 
     # Splitting data 70%/15%/15% training/validation/test sets
     train_size = int(len(images_range) * 0.7)
@@ -96,10 +96,10 @@ if __name__ == "__main__":
                  loss=DiceLoss(),
                  metrics=[tf.keras.metrics.BinaryIoU()])
 
-    EPOCHS = 24
+    EPOCHS = 10
     BATCH_SIZE = 32
 
-    train_dataset = train_ds.batch(BATCH_SIZE)
+    train_dataset = train_ds.batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
     val_dataset = val_ds.batch(BATCH_SIZE)
     test_dataset = test_ds.batch(BATCH_SIZE)
 
@@ -119,4 +119,3 @@ if __name__ == "__main__":
     plt.savefig("logs/model_iou.png")
 
     unet.save("trained_model")
-    unet.save_weights('trained_model_weights.h5')

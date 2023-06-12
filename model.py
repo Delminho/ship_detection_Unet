@@ -1,31 +1,33 @@
 import tensorflow as tf
 
 
+
 class DiceLoss(tf.keras.losses.Loss):
-    def __init__(self, smooth=1e-6, gama=2):
+    def __init__(self, smooth=1e-6, gamma=2):
         super(DiceLoss, self).__init__()
         self.name = 'NDL'
         self.smooth = smooth
-        self.gama = gama
+        self.gamma = gamma
 
     def call(self, y_true, y_pred):
         y_true, y_pred = tf.cast(
             y_true, dtype=tf.float32), tf.cast(y_pred, tf.float32)
         nominator = 2 * tf.reduce_sum(tf.multiply(y_pred, y_true)) + self.smooth
-        denominator = tf.reduce_sum(y_pred ** self.gama) + tf.reduce_sum(y_true ** self.gama) + self.smooth
+        denominator = tf.reduce_sum(y_pred ** self.gamma) + tf.reduce_sum(y_true ** self.gamma) + self.smooth
         result = 1 - tf.divide(nominator, denominator)
         return result
 
 
-def conv_block(inputs=None, n_filters=4, dropout_prob=0, max_pooling=True):
+def conv_block(inputs=None, n_filters=4, dropout_prob=0, max_pooling=True, batch_norm=True):
     """
     Convolutional downsampling block
 
     Arguments:
         inputs -- Input tensor
         n_filters -- Number of filters for the convolutional layers
-        dropout_prob -- Dropout probability
+        dropout_prob -- Dropout probability (0 for no dropout)
         max_pooling -- Use MaxPooling2D to reduce the spatial dimensions of the output volume
+        batch_norm -- Whether to include BatchNormalization layers (after convolutional ones)
     Returns:
         next_layer, skip_connection --  Next layer and skip connection outputs
     """
@@ -35,11 +37,19 @@ def conv_block(inputs=None, n_filters=4, dropout_prob=0, max_pooling=True):
                                   activation='relu',
                                   padding='same',
                                   kernel_initializer='he_normal')(inputs)
+    if batch_norm:
+        conv = tf.keras.layers.BatchNormalization()(conv)
+    
+    
     conv = tf.keras.layers.Conv2D(n_filters,  # Number of filters
                                   kernel_size=(3, 3),  # Kernel size
                                   activation='relu',
                                   padding='same',
                                   kernel_initializer='he_normal')(conv)
+    # If batch_norm is True using a BatchNormalization layer
+    if batch_norm:
+        conv = tf.keras.layers.BatchNormalization()(conv)
+    
     # If dropout_porb is not 0 using a Dropout layer
     if dropout_prob > 0:
         conv = tf.keras.layers.Dropout(dropout_prob)(conv)
@@ -56,7 +66,7 @@ def conv_block(inputs=None, n_filters=4, dropout_prob=0, max_pooling=True):
     return next_layer, skip_connection
 
 
-def upsampling_block(prev_input, skipped_input, n_filters=4):
+def upsampling_block(prev_input, skipped_input, n_filters=4, dropout_prob=0, batch_norm=True):
     """
     Convolutional upsampling block
 
@@ -64,6 +74,8 @@ def upsampling_block(prev_input, skipped_input, n_filters=4):
         prev_input -- Input tensor from previous layer
         skipped_input -- Input tensor from previous skip layer
         n_filters -- Number of filters for the convolutional layers
+        dropout_prob -- Dropout probability (0 for no dropout)
+        batch_norm -- Whether to include BatchNormalization layers (after convolutional ones)
     Returns:
         conv -- Tensor output
     """
@@ -78,34 +90,45 @@ def upsampling_block(prev_input, skipped_input, n_filters=4):
     conv = tf.keras.layers.Conv2D(n_filters, kernel_size=(3, 3),
                                   activation='relu', padding='same',
                                   kernel_initializer='he_normal')(merge)
+    if batch_norm:
+        conv = tf.keras.layers.BatchNormalization()(conv)
+    
     conv = tf.keras.layers.Conv2D(n_filters, kernel_size=(3, 3),
                                   activation='relu', padding='same',
                                   kernel_initializer='he_normal')(conv)
 
+    if batch_norm:
+        conv = tf.keras.layers.BatchNormalization()(conv)
+        
+    if dropout_prob:
+        conv = tf.keras.layers.Dropout(dropout_prob)(conv)
+    
     return conv
 
 
-def unet_model(input_size=(96, 96, 3), n_filters=4, n_classes=1):
+def unet_model(input_size=(None, None, 3), n_filters=4, n_classes=1):
     """
     Unet model
 
     Arguments:
-        input_size -- Input shape
+        input_size -- Input shape (None, None, 3) to allow arbitrary size
         n_filters -- Number of filters for the convolutional layers
         n_classes -- Number of output classes
     Returns:
         model -- tf.keras.Model
     """
     inputs = tf.keras.layers.Input(input_size)
+    # Add some Gaussian Noise for regularization
+    inputs = tf.keras.layers.GaussianNoise(0.05)(inputs)
     # Encoding
-    cblock1 = conv_block(inputs, n_filters, dropout_prob=0.2)
-    cblock2 = conv_block(cblock1[0], n_filters * 2, dropout_prob=0.2)
-    cblock3 = conv_block(cblock2[0], n_filters * 4, max_pooling=False, dropout_prob=0.3)
-    #cblock4 = conv_block(cblock3[0], n_filters * 8, max_pooling=False)
+    cblock1 = conv_block(inputs, n_filters)
+    cblock2 = conv_block(cblock1[0], n_filters * 2)
+    cblock3 = conv_block(cblock2[0], n_filters * 4)
+    cblock4 = conv_block(cblock3[0], n_filters * 8, max_pooling=False)
 
     # Decoding
-    #ublock6 = upsampling_block(cblock4[0], cblock3[1], n_filters * 4)
-    ublock7 = upsampling_block(cblock3[0], cblock2[1], n_filters * 2)
+    ublock6 = upsampling_block(cblock4[0], cblock3[1], n_filters * 4)
+    ublock7 = upsampling_block(ublock6, cblock2[1], n_filters * 2)
     ublock8 = upsampling_block(ublock7, cblock1[1], n_filters)
 
     conv9 = tf.keras.layers.Conv2D(n_filters,
